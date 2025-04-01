@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مشغل IPTV الخارق</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(45deg, #0f0f0f, #1e1e1e);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+        }
+        #sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            transition: transform 0.3s ease;
+            transform: translateX(0);
+            position: fixed;
+            height: 100%;
+            overflow-y: auto;
+            z-index: 10;
+        }
+        #sidebar.hidden {
+            transform: translateX(-300px);
+        }
+        #toggle-sidebar {
+            position: absolute;
+            top: 10px;
+            right: -40px;
+            background: #00b7ff;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 0 5px 5px 0;
+        }
+        h1 {
+            font-size: 28px;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #00b7ff;
+            text-shadow: 0 0 15px rgba(0, 183, 255, 0.5);
+        }
+        #m3u-input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        #load-btn, #search-btn {
+            width: 100%;
+            padding: 12px;
+            margin: 5px 0;
+            background: #00b7ff;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        #load-btn:hover, #search-btn:hover {
+            background: #0099cc;
+        }
+        #search-input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+        #channels, #favorites {
+            margin-top: 20px;
+        }
+        #channels h3, #favorites h3 {
+            color: #ffcc00;
+            margin-bottom: 10px;
+        }
+        #channel-list, #fav-list {
+            list-style: none;
+            padding: 0;
+        }
+        #channel-list li, #fav-list li {
+            padding: 12px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s;
+        }
+        #channel-list li:hover, #fav-list li:hover {
+            background: #00b7ff;
+            transform: scale(1.02);
+        }
+        .fav-btn {
+            background: none;
+            border: none;
+            color: #ffcc00;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #player-wrapper {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            padding-left: 320px;
+        }
+        #player {
+            width: 90%;
+            max-width: 1200px;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+        }
+        @media (max-width: 768px) {
+            #sidebar {
+                width: 250px;
+            }
+            #player-wrapper {
+                padding-left: 0;
+            }
+            #player {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <button id="toggle-sidebar"><i class="fas fa-bars"></i></button>
+        <h1>مشغل IPTV الخارق</h1>
+        <input type="text" id="m3u-input" placeholder="أدخل رابط M3U هنا">
+        <button id="load-btn">تحميل القنوات</button>
+        <input type="text" id="search-input" placeholder="ابحث عن قناة...">
+        <button id="search-btn">بحث</button>
+        <div id="channels">
+            <h3>القنوات</h3>
+            <ul id="channel-list"></ul>
+        </div>
+        <div id="favorites">
+            <h3>المفضلة</h3>
+            <ul id="fav-list"></ul>
+        </div>
+    </div>
+    <div id="player-wrapper">
+        <video id="player" controls crossorigin playsinline></video>
+    </div>
+
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        const player = new Plyr('#player', {
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'],
+            autoplay: true,
+            quality: { default: 1080, options: [1080, 720, 480, 360] },
+            settings: ['quality', 'speed'],
+            speed: { selected: 1, options: [0.5, 1, 1.5, 2] }
+        });
+
+        const channelList = document.getElementById('channel-list');
+        const favList = document.getElementById('fav-list');
+        let channels = [];
+        let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
+
+        // دعم HLS
+        const hls = new Hls();
+        hls.on(Hls.Events.MANIFEST_PARSED, () => player.play());
+
+        // تحميل قائمة M3U
+        document.getElementById('load-btn').addEventListener('click', async () => {
+            const m3uUrl = document.getElementById('m3u-input').value;
+            if (!m3uUrl) {
+                alert('يرجى إدخال رابط M3U صالح!');
+                return;
+            }
+            try {
+                const response = await fetch(m3uUrl);
+                const text = await response.text();
+                channels = parseM3U(text);
+                displayChannels();
+            } catch (error) {
+                alert('خطأ في تحميل القائمة. تأكد من الرابط!');
+                console.error(error);
+            }
+        });
+
+        // تحليل ملف M3U مع دعم الفئات
+        function parseM3U(text) {
+            const lines = text.split('\n');
+            const channels = [];
+            let currentChannel = {};
+
+            for (const line of lines) {
+                if (line.startsWith('#EXTINF')) {
+                    const nameMatch = line.match(/,(.+)/);
+                    const groupMatch = line.match(/group-title="([^"]+)"/);
+                    currentChannel.name = nameMatch ? nameMatch[1] : 'قناة بدون اسم';
+                    currentChannel.group = groupMatch ? groupMatch[1] : 'غير مصنف';
+                } else if (line.startsWith('http')) {
+                    currentChannel.url = line.trim();
+                    channels.push({ ...currentChannel });
+                    currentChannel = {};
+                }
+            }
+            return channels;
+        }
+
+        // عرض القنوات
+        function displayChannels(filter = '') {
+            channelList.innerHTML = '';
+            const filteredChannels = channels.filter(ch => ch.name.toLowerCase().includes(filter.toLowerCase()));
+            filteredChannels.forEach((channel, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `${channel.name} <button class="fav-btn"><i class="fas fa-star"></i></button>`;
+                li.addEventListener('click', () => playChannel(channel.url));
+                li.querySelector('.fav-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    addToFavorites(channel);
+                });
+                channelList.appendChild(li);
+            });
+            displayFavorites();
+        }
+
+        // تشغيل القناة
+        function playChannel(url) {
+            if (Hls.isSupported() && url.includes('.m3u8')) {
+                hls.loadSource(url);
+                hls.attachMedia(player.media);
+            } else {
+                player.source = {
+                    type: 'video',
+                    sources: [{ src: url, type: 'video/mp4' }]
+                };
+            }
+            player.fullscreen.enter();
+        }
+
+        // إضافة إلى المفضلة
+        function addToFavorites(channel) {
+            if (!favorites.some(fav => fav.url === channel.url)) {
+                favorites.push(channel);
+                localStorage.setItem('favorites', JSON.stringify(favorites));
+                displayFavorites();
+            }
+        }
+
+        // عرض المفضلة
+        function displayFavorites() {
+            favList.innerHTML = '';
+            favorites.forEach((channel) => {
+                const li = document.createElement('li');
+                li.textContent = channel.name;
+                li.addEventListener('click', () => playChannel(channel.url));
+                favList.appendChild(li);
+            });
+        }
+
+        // البحث في القنوات
+        document.getElementById('search-btn').addEventListener('click', () => {
+            const searchTerm = document.getElementById('search-input').value;
+            displayChannels(searchTerm);
+        });
+
+        // طي/فتح الشريط الجانبي
+        document.getElementById('toggle-sidebar').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('hidden');
+        });
+
+        // تحميل المفضلة عند البدء
+        displayFavorites();
+    </script>
+</body>
+</html>
